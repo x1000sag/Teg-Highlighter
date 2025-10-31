@@ -1,2 +1,2 @@
-# Teg-Highlighter
+# Tag-Highlighter
 Vscode plugin
