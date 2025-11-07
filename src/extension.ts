@@ -63,6 +63,90 @@ export async function activate(ctx: vscode.ExtensionContext) {
     return undefined;
   }
 
+  // Вставить тег в текущую позицию/строки
+  ctx.subscriptions.push(vscode.commands.registerCommand('tagHighlighter.insertTag', async () => {
+    const editor = vscode.window.activeTextEditor;
+    if (!editor) { vscode.window.showInformationMessage('Нет активного редактора'); return; }
+
+    // Получаем список тегов из настроек (fallback на TODO/FIXME)
+    const cfg = vscode.workspace.getConfiguration('tagHighlighter');
+    const cfgTags = (cfg.get<any[]>('tags') ?? []).map(t => t.name?.toString()).filter(Boolean) as string[];
+    const picks = cfgTags.length ? cfgTags : ['TODO', 'FIXME', 'NOTE'];
+
+    // Пусть пользователь выберет или введёт свой тег
+    const choice = await vscode.window.showQuickPick(
+      [...picks, '⏎ Ввести свой тег...'],
+      { placeHolder: 'Выберите тег для вставки' }
+    );
+    let tagName: string | undefined;
+    if (!choice) return;
+    if (choice === '⏎ Ввести свой тег...') {
+      const input = await vscode.window.showInputBox({ prompt: 'Имя тега (пример: TODO)', validateInput: v => v && v.trim() ? null : 'Введите имя' });
+      if (!input) return;
+      tagName = input.trim();
+    } else {
+      tagName = choice;
+    }
+
+    // Простая карта комментариев по languageId
+    const commentMap: Record<string, { line?: string; blockStart?: string; blockEnd?: string }> = {
+      javascript: { line: '//' , blockStart: '/*', blockEnd: '*/' },
+      typescript: { line: '//' , blockStart: '/*', blockEnd: '*/' },
+      java: { line: '//' , blockStart: '/*', blockEnd: '*/' },
+      cpp: { line: '//' , blockStart: '/*', blockEnd: '*/' },
+      c: { line: '//' , blockStart: '/*', blockEnd: '*/' },
+      python: { line: '#' },
+      ruby: { line: '#' },
+      sh: { line: '#' },
+      bash: { line: '#' },
+      zsh: { line: '#' },
+      sql: { line: '--', blockStart: '/*', blockEnd: '*/' },
+      html: { blockStart: '<!--', blockEnd: '-->' },
+      xml: { blockStart: '<!--', blockEnd: '-->' },
+      // fallback will be '//' if language unknown
+    };
+
+    const languageId = editor.document.languageId;
+    const tokens = commentMap[languageId] ?? { line: '//' };
+
+    await editor.edit(editBuilder => {
+      // For each selection insert comment snippet
+      for (const sel of editor.selections) {
+        // If selection is not empty, we will prefix the selection line with comment+tag
+        const insertPos = sel.isEmpty ? sel.start : new vscode.Position(sel.start.line, 0);
+
+        if (tokens.line) {
+          // single-line comment style: insert e.g. "// TODO: "
+          const text = `${tokens.line} ${tagName}: `;
+          editBuilder.insert(insertPos, text);
+        } else if (tokens.blockStart && tokens.blockEnd && sel.isEmpty) {
+          // block comment on empty selection: insert "/* TAG:  */" and place cursor between
+          const text = `${tokens.blockStart} ${tagName}:  ${tokens.blockEnd}`;
+          editBuilder.insert(insertPos, text);
+        } else {
+          // fallback to line comment
+          const text = `// ${tagName}: `;
+          editBuilder.insert(insertPos, text);
+        }
+      }
+    });
+
+    // после вставки — обновим сканер/декоратор/вью для видимых редакторов
+    // (если у тебя есть scanner/decorator/tree в замыкании activate)
+    try {
+      // пересканируем видимые документы (быстро)
+      for (const ed of vscode.window.visibleTextEditors) {
+        await scanner.scanDocument(ed.document);
+        decorator.reloadColors?.(); // если есть метод reloadColors
+        decorator.decorateEditor(ed, scanner.getTodosForUri(ed.document.uri));
+      }
+      tree.refresh?.();
+    } catch (e) {
+      // silently ignore
+    }
+  }));
+
+
   // Команда: добавить тег (имя и опционально цвет)
   ctx.subscriptions.push(vscode.commands.registerCommand('tagHighlighter.addTag', async () => {
     const name = await vscode.window.showInputBox({
