@@ -1,41 +1,113 @@
 {
   "name": "tag-highlighter",
-  "displayName": "Tag-Highlighter",
-  "description": "",
-  "version": "0.0.1",
+  "displayName": "Tag Highlighter",
+  "description": "Подсвечивает теги вроде TODO, FIXME, NOTE и отображает их в боковой панели.",
+  "version": "0.1.0",
   "engines": {
-    "vscode": "^1.105.0"
+    "vscode": "^1.60.0"
   },
   "categories": [
-    "Other"
+    "Other",
+    "Productivity"
   ],
-  "activationEvents": [],
+  "activationEvents": [
+    "onStartupFinished",
+    "onCommand:tagHighlighter.openTagsView",
+    "onCommand:tagHighlighter.nextTag",
+    "onCommand:tagHighlighter.prevTag",
+    "onCommand:tagHighlighter.generateReport",
+    "onCommand:tagHighlighter.openKeybindings",
+    "onCommand:tagHighlighter.addTag",
+    "onCommand:tagHighlighter.removeTag"
+  ],
   "main": "./out/extension.js",
+  "scripts": {
+    "compile": "tsc -p ./",
+    "watch": "tsc -w -p ./",
+    "vscode:prepublish": "npm run compile",
+    "package": "vsce package",
+    "publish": "vsce publish"
+  },
+  "devDependencies": {
+    "@types/node": "^18.0.0",
+    "@types/vscode": "^1.60.0",
+    "typescript": "^4.9.0",
+    "vsce": "^2.15.0"
+  },
   "contributes": {
     "commands": [
       {
-        "command": "tag-highlighter.helloWorld",
-        "title": "Hello World"
+        "command": "tagHighlighter.openTagsView",
+        "title": "Tag Highlighter: Открыть список тегов"
+      },
+      {
+        "command": "tagHighlighter.nextTag",
+        "title": "Tag Highlighter: Следующий тег"
+      },
+      {
+        "command": "tagHighlighter.prevTag",
+        "title": "Tag Highlighter: Предыдущий тег"
+      },
+      {
+        "command": "tagHighlighter.generateReport",
+        "title": "Tag Highlighter: Сгенерировать отчёт (JSON)"
+      },
+      {
+        "command": "tagHighlighter.openKeybindings",
+        "title": "Tag Highlighter: Открыть настройки горячих клавиш"
+      },
+      {
+        "command": "tagHighlighter.addTag",
+        "title": "Tag Highlighter: Добавить тег"
+      },
+      {
+        "command": "tagHighlighter.removeTag",
+        "title": "Tag Highlighter: удалить тег"
       }
-    ]
-  },
-  "scripts": {
-    "vscode:prepublish": "npm run compile",
-    "compile": "tsc -p ./",
-    "watch": "tsc -watch -p ./",
-    "pretest": "npm run compile && npm run lint",
-    "lint": "eslint src",
-    "test": "vscode-test"
-  },
-  "devDependencies": {
-    "@types/vscode": "^1.105.0",
-    "@types/mocha": "^10.0.10",
-    "@types/node": "22.x",
-    "@typescript-eslint/eslint-plugin": "^8.45.0",
-    "@typescript-eslint/parser": "^8.45.0",
-    "eslint": "^9.36.0",
-    "typescript": "^5.9.3",
-    "@vscode/test-cli": "^0.0.11",
-    "@vscode/test-electron": "^2.5.2"
+    ],
+    "views": {
+      "explorer": [
+        {
+          "id": "tagsView",
+          "name": "Tags"
+        }
+      ]
+    },
+    "configuration": {
+      "type": "object",
+      "title": "Tag Highlighter — настройки",
+      "properties": {
+        "tagHighlighter.tags": {
+          "type": "array",
+          "default": [
+            { "name": "TODO", "color": "#ffd700", "pattern": "TODO" },
+            { "name": "FIXME", "color": "#ff4d4d", "pattern": "FIXME" },
+            { "name": "NOTE", "color": "#66ccff", "pattern": "NOTE" }
+          ],
+          "description": "Список тегов для подсветки. Каждый тег может иметь имя, регулярное выражение и цвет."
+        },
+        "tagHighlighter.scanOnSave": {
+          "type": "boolean",
+          "default": true,
+          "description": "Автоматически пересканировать файлы при сохранении."
+        },
+        "tagHighlighter.respectGitIgnore": {
+          "type": "boolean",
+          "default": true,
+          "description": "Игнорировать файлы, указанные в .gitignore."
+        },
+        "tagHighlighter.exclude": {
+          "type": "array",
+          "default": ["**/node_modules/**", "**/.git/**", "**/dist/**"],
+          "description": "Глоб-паттерны файлов и папок, исключаемых из сканирования."
+        },
+        "tagHighlighter.showInStatusBar": {
+          "type": "boolean",
+          "default": false,
+          "description": "Показывать количество тегов в строке состояния."
+        }
+        
+      }
+    }
   }
 }
