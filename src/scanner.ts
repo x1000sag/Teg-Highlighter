@@ -1,5 +1,7 @@
 import * as vscode from 'vscode';
 
+// Модуль отвечающий за сканирование документов на наличие тегов с помощью регулярных выражений
+
 export interface TagConfig {
   name: string;
   pattern?: string;
@@ -17,15 +19,12 @@ export interface TodoItem {
   line: number;
 }
 
-/**
- * Scanner — ищет теги внутри комментариев (per-language comment tokens).
- * Кеширует результаты для каждого открытого документа.
- */
 export class Scanner implements vscode.Disposable {
   private tags: TagConfig[] = [];
   private tagRegexes: RegExp[] = [];
   private cache = new Map<string, TodoItem[]>();
 
+  // Карты комментариев в разных языках программирования
   private commentMap: Record<string, { line?: string; blockStart?: string; blockEnd?: string }> = {
     javascript: { line: '//', blockStart: '/*', blockEnd: '*/' },
     typescript: { line: '//', blockStart: '/*', blockEnd: '*/' },
@@ -45,10 +44,13 @@ export class Scanner implements vscode.Disposable {
     this.setTags(initialTags);
   }
 
+  // Функция отчистки класса
   dispose(): void {
     this.cache.clear();
   }
 
+  // Принимает массив тегов
+  // Инициализирует массив тегов класса и массив регулярных выражений с помощью аргумента
   setTags(tags: TagConfig[]) {
     this.tags = tags;
     this.tagRegexes = this.tags.map(t => {
@@ -57,6 +59,9 @@ export class Scanner implements vscode.Disposable {
     });
   }
 
+  // Принимает объект типа `vscode.TextDocument` и производит в нём сканирование на наличие тегов,
+  // инициализированных в классе. Кеширует `URI` файла в классе.
+  // Возвращает массив найденных тегов и их координаты в файле.
   async scanDocument(doc: vscode.TextDocument): Promise<TodoItem[]> {
     if (!doc || doc.isClosed) return [];
     const tokens = this.commentMap[doc.languageId] || {};
@@ -117,13 +122,12 @@ export class Scanner implements vscode.Disposable {
           if (!m) continue;
           const tag = this.tags[k].name;
           const tagText = (m[3] ?? '').trim();
-          // try to find local index inside commentText
           const localIdx = commentText.search(new RegExp(escapeRegex(this.tags[k].name), 'i'));
           const absoluteIndex = localIdx >= 0 ? offset + localIdx : Math.max(offset, text.indexOf(m[0].trim(), offset));
           const start = new vscode.Position(i, absoluteIndex);
           const end = new vscode.Position(i, absoluteIndex + (m[0].trim().length));
           res.push({ uri: doc.uri, range: new vscode.Range(start, end), lineText: text, tag, tagText, line: i });
-          break; // только первый тег на строку
+          break;
         }
       }
     }
@@ -132,6 +136,8 @@ export class Scanner implements vscode.Disposable {
     return res;
   }
 
+  // Принимает выражение сканируемых объектов и деректорий; и исключаемых объектов и директорий
+  // Сканирует workspace IDE на наличие тегов
   async scanWorkspace(glob = '**/*.*', exclude = '**/node_modules/**'): Promise<TodoItem[]> {
     const files = await vscode.workspace.findFiles(glob, exclude);
     const all: TodoItem[] = [];
@@ -141,29 +147,41 @@ export class Scanner implements vscode.Disposable {
         const items = await this.scanDocument(d);
         all.push(...items);
       } catch {
-        // ignore unreadable
+
       }
     }
     return all;
   }
 
+  // Принимает `URI` файла.
+  // Возвращает массив тегов в этом файле
   getTodosForUri(uri: vscode.Uri): TodoItem[] {
     return this.cache.get(uri.toString()) ?? [];
   }
 
+  // Возвращает массив тэгов с закешированными `URI`
   getAllCached(): TodoItem[] {
     const arr: TodoItem[] = [];
-    for (const v of this.cache.values()) arr.push(...v);
+    for (const v of this.cache.values()) {
+      arr.push(...v);
+    }
     arr.sort((a, b) => a.uri.fsPath.localeCompare(b.uri.fsPath) || a.line - b.line);
     return arr;
   }
 
+  // Принимает `URI`.
+  // Удаляет закешированный `URI`
   clearCache(uri?: vscode.Uri) {
-    if (uri) this.cache.delete(uri.toString());
-    else this.cache.clear();
+    if (uri) {
+      this.cache.delete(uri.toString());
+    }
+    else {
+      this.cache.clear();
+    }
   }
 }
 
+// Принимает строку с регулярным выражением и отчищает её от регулярного выражения.
 function escapeRegex(s: string) {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }

@@ -18,7 +18,8 @@
     "onCommand:tagHighlighter.generateReport",
     "onCommand:tagHighlighter.openKeybindings",
     "onCommand:tagHighlighter.addTag",
-    "onCommand:tagHighlighter.removeTag"
+    "onCommand:tagHighlighter.removeTag",
+    "onCommand:tagHighlighter.insertTag"
   ],
   "main": "./out/extension.js",
   "scripts": {
@@ -35,6 +36,25 @@
     "vsce": "^2.15.0"
   },
   "contributes": {
+    "keybindings":[{
+      "command": "tagHighlighter.insertTag",
+      "key": "ctrl+alt+i",
+      "mac": "cmd+alt+i",
+      "when": "editorTextFocus"
+    },
+    {
+      "command": "tagHighlighter.nextTag",
+      "key": "ctrl+alt+o",
+      "mac": "cmd+alt+o",
+      "when": "editorTextFocus"
+    },
+    {
+      "command": "tagHighlighter.prevTag",
+      "key": "ctrl+alt+p",
+      "mac": "cmd+alt+p",
+      "when": "editorTextFocus"
+    }
+    ],
     "commands": [
       {
         "command": "tagHighlighter.openTagsView",
@@ -49,10 +69,6 @@
         "title": "Tag Highlighter: Предыдущий тег"
       },
       {
-        "command": "tagHighlighter.generateReport",
-        "title": "Tag Highlighter: Сгенерировать отчёт (JSON)"
-      },
-      {
         "command": "tagHighlighter.openKeybindings",
         "title": "Tag Highlighter: Открыть настройки горячих клавиш"
       },
@@ -63,6 +79,10 @@
       {
         "command": "tagHighlighter.removeTag",
         "title": "Tag Highlighter: удалить тег"
+      },
+      {
+        "command": "tagHighlighter.insertTag",
+        "title": "Tag Highlighter: быстрая вставка тега"
       }
     ],
     "views": {

@@ -1,21 +1,32 @@
 import * as vscode from 'vscode';
 import { Scanner, TodoItem } from './scanner';
 
+// Модуль отвечающий за работу TreeView тегов
+
 export class TreeDataView implements vscode.TreeDataProvider<TodoNode>, vscode.Disposable {
   private _onDidChange = new vscode.EventEmitter<TodoNode | undefined | void>();
   readonly onDidChangeTreeData = this._onDidChange.event;
 
   constructor(private scanner: Scanner) {}
 
-  dispose() { this._onDidChange.dispose(); }
+  // Удаление окна TreeView
+  dispose() {
+    this._onDidChange.dispose(); 
+  }
 
-  refresh() { this._onDidChange.fire(); }
+  // Обнавляет окно TreeView
+  refresh() {
+    this._onDidChange.fire();
+  }
 
-  getTreeItem(el: TodoNode): vscode.TreeItem { return el; }
+  // Принимает аргумент класса `TodoNode` и возвращает `TreeItem`
+  getTreeItem(el: TodoNode): vscode.TreeItem {
+    return el; 
+  }
 
+  // Принимает класс `TodoNode` и возвращает его массив его потомков
   async getChildren(el?: TodoNode): Promise<TodoNode[]> {
     if (!el) {
-      // top-level: файлы
       const all = this.scanner.getAllCached();
       const byFile = new Map<string, TodoItem[]>();
       for (const t of all) {
@@ -38,9 +49,10 @@ export class TreeDataView implements vscode.TreeDataProvider<TodoNode>, vscode.D
       return nodes;
     }
 
-    // children: todos в файле
     const meta = el.meta;
-    if (!meta || !meta.todos) return [];
+    if (!meta || !meta.todos) {
+      return [];
+    }
     return meta.todos.map((t: TodoItem) => {
       const preview = t.tagText || t.lineText.trim();
       const short = preview.length > 80 ? preview.slice(0, 80) + '…' : preview;

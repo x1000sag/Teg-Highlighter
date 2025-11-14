@@ -1,6 +1,8 @@
 import * as vscode from 'vscode';
 import { TodoItem, TagConfig } from './scanner';
 
+// Модуль отвечающий за визуальную декорацию фрагмента текстового файла.
+
 export class Decorator implements vscode.Disposable {
   private decos = new Map<string, vscode.TextEditorDecorationType>();
   private colors = new Map<string, string>();
@@ -14,6 +16,7 @@ export class Decorator implements vscode.Disposable {
     this.reloadColors();
   }
 
+  // Актуализирует в классе цвета тегов из конфига в workspace IDE
   reloadColors() {
     this.colors.clear();
     const cfg = vscode.workspace.getConfiguration('tagHighlighter');
@@ -23,6 +26,8 @@ export class Decorator implements vscode.Disposable {
     }
   }
 
+  // Принимает текстовый документ и массив тегов в этом файле.
+  // Применяет декоратор ко всем тегам в этом файле
   decorateEditor(ed: vscode.TextEditor, todos: TodoItem[]) {
     if (!ed) return;
     for (const d of this.decos.values()) ed.setDecorations(d, []);
@@ -40,8 +45,12 @@ export class Decorator implements vscode.Disposable {
     }
   }
 
+  // Принимает название тега и создает `TextEditorDecorationType` (если не существует) с параметрами из конфигурации тега в workspacce
+  // Возвращает созданный или найденный `TextEditorDecorationType`
   private getOrCreate(tag: string): vscode.TextEditorDecorationType {
-    if (this.decos.has(tag)) return this.decos.get(tag)!;
+    if (this.decos.has(tag)) {
+      return this.decos.get(tag)!;
+    }
     const color = this.colors.get(tag.toUpperCase()) ?? '#ffd700';
     const deco = vscode.window.createTextEditorDecorationType({
       backgroundColor: color + '20', // 20 = прозрачность
@@ -52,8 +61,11 @@ export class Decorator implements vscode.Disposable {
     return deco;
   }
 
+  // Удаляет декораторы
   dispose() {
-    for (const d of this.decos.values()) d.dispose();
+    for (const d of this.decos.values()) {
+      d.dispose();
+    }
     this.decos.clear();
   }
 }

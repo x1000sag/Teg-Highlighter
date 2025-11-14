@@ -2,93 +2,92 @@ import * as vscode from 'vscode';
 import { Scanner } from './scanner';
 import { Decorator } from './decorator';
 import { TreeDataView } from './treeDataView';
-import { log } from 'console';
 
-// Простая точка входа — минимальная логика, всё делегируется модулям.
-export async function activate(ctx: vscode.ExtensionContext) {
+// Точка входа
+export async function activate(context: vscode.ExtensionContext) {
   const cfg = vscode.workspace.getConfiguration('tagHighlighter');
   const tags = (cfg.get('tags') as any[] | undefined) ?? [{ name: 'TODO' }, { name: 'FIXME' }, { name: 'NOTE' }];
  
   const scanner = new Scanner(tags);
-  const decorator = new Decorator(ctx);
+  const decorator = new Decorator(context);
   const tree = new TreeDataView(scanner);
 
-  const view = vscode.window.createTreeView('tagsView', { treeDataProvider: tree });
-  ctx.subscriptions.push(view, tree, decorator, scanner);
+  const view = vscode.window.createTreeView('tagsView', {
+    treeDataProvider: tree
+  });
+  context.subscriptions.push(view, tree, decorator, scanner);
 
-  // команды
+  // Регистрация комманд
 
-  ctx.subscriptions.push(vscode.commands.registerCommand('tagHighlighter.openTagsView', async () => {
-    // сначала открываем explorer чтобы вью отобразился
+  // Комманда открытия панели TreeView 
+  context.subscriptions.push(vscode.commands.registerCommand('tagHighlighter.openTagsView', async () => {
     await vscode.commands.executeCommand('workbench.view.explorer');
-
-    // получаем корневые узлы и, если есть, reveal первого
     try {
-      const roots = await tree.getChildren(); // TreeDataView.getChildren()
+      const roots = await tree.getChildren();
       if (roots && roots.length > 0) {
-        // reveal возвращает Thenable<void> — используем then(onFulfilled, onRejected)
         view.reveal(roots[0], { focus: true, select: false }).then(
-          () => { /* ok */ },
-          () => { /* ignore reveal errors */ }
+          () => {},
+          () => {}
         );
       }
     } catch (err) {
-      // safe fallback: ничего не делаем, можно логировать при необходимости
-      // console.error('openTodosView error', err);
+      console.error('openTodosView error', err);
     }
   }));
 
-  // В extension.ts, внутри activate(ctx) — после создания scanner, decorator, tree:
-
-  // --- helper: получить теги из настроек (возвращает TagConfig[])
+  // Возвращает массив тегов из конфигурации плагина в workspace IDE.
   function getConfigTags(): any[] {
     const cfg = vscode.workspace.getConfiguration('tagHighlighter');
     const tags = cfg.get<any[]>('tags');
     return Array.isArray(tags) ? tags : [];
   }
 
-  // --- helper: сохранить теги (workspace scope)
+  // Принимает массив тегов и сохраняет их в конфигурацию плагина в workspace.
   async function saveConfigTags(tags: any[]) {
     const cfg = vscode.workspace.getConfiguration('tagHighlighter');
-    // true -> save in workspace settings; сменить на ConfigurationTarget.Global для user settings
     await cfg.update('tags', tags, vscode.ConfigurationTarget.Workspace);
   }
 
-  // --- validate hex color like #RRGGBB or RRGGBB
+  // Принимает строку пользовательского ввода и преобразует её в корректную кодировку цвета RGB в шестнадцатеричной записи 
   function normalizeHexColor(input: string | undefined): string | undefined {
-    if (!input) return undefined;
+    if (!input) {
+      return undefined;
+    }
     const s = input.trim();
     const noHash = s.startsWith('#') ? s.slice(1) : s;
-    if (/^[0-9a-fA-F]{6}$/.test(noHash)) return '#' + noHash.toLowerCase();
+    if (/^[0-9a-fA-F]{6}$/.test(noHash)) {
+      return '#' + noHash.toLowerCase();
+    }
     return undefined;
   }
 
-  // Вставить тег в текущую позицию/строки
-  ctx.subscriptions.push(vscode.commands.registerCommand('tagHighlighter.insertTag', async () => {
+  // Комманда быcтрой вставки тега в текущий активный файл в редакторе
+  context.subscriptions.push(vscode.commands.registerCommand('tagHighlighter.insertTag', async () => {
     const editor = vscode.window.activeTextEditor;
     if (!editor) { vscode.window.showInformationMessage('Нет активного редактора'); return; }
 
-    // Получаем список тегов из настроек (fallback на TODO/FIXME)
     const cfg = vscode.workspace.getConfiguration('tagHighlighter');
     const cfgTags = (cfg.get<any[]>('tags') ?? []).map(t => t.name?.toString()).filter(Boolean) as string[];
     const picks = cfgTags.length ? cfgTags : ['TODO', 'FIXME', 'NOTE'];
 
-    // Пусть пользователь выберет или введёт свой тег
     const choice = await vscode.window.showQuickPick(
-      [...picks, '⏎ Ввести свой тег...'],
+      [...picks, 'Ввести свой тег...'],
       { placeHolder: 'Выберите тег для вставки' }
     );
     let tagName: string | undefined;
-    if (!choice) return;
-    if (choice === '⏎ Ввести свой тег...') {
+    if (!choice) {
+      return;
+    }
+    if (choice === 'Ввести свой тег...') {
       const input = await vscode.window.showInputBox({ prompt: 'Имя тега (пример: TODO)', validateInput: v => v && v.trim() ? null : 'Введите имя' });
-      if (!input) return;
+      if (!input) {
+        return;
+      }
       tagName = input.trim();
     } else {
       tagName = choice;
     }
 
-    // Простая карта комментариев по languageId
     const commentMap: Record<string, { line?: string; blockStart?: string; blockEnd?: string }> = {
       javascript: { line: '//' , blockStart: '/*', blockEnd: '*/' },
       typescript: { line: '//' , blockStart: '/*', blockEnd: '*/' },
@@ -103,71 +102,64 @@ export async function activate(ctx: vscode.ExtensionContext) {
       sql: { line: '--', blockStart: '/*', blockEnd: '*/' },
       html: { blockStart: '<!--', blockEnd: '-->' },
       xml: { blockStart: '<!--', blockEnd: '-->' },
-      // fallback will be '//' if language unknown
     };
 
     const languageId = editor.document.languageId;
     const tokens = commentMap[languageId] ?? { line: '//' };
 
     await editor.edit(editBuilder => {
-      // For each selection insert comment snippet
       for (const sel of editor.selections) {
-        // If selection is not empty, we will prefix the selection line with comment+tag
         const insertPos = sel.isEmpty ? sel.start : new vscode.Position(sel.start.line, 0);
 
         if (tokens.line) {
-          // single-line comment style: insert e.g. "// TODO: "
           const text = `${tokens.line} ${tagName}: `;
           editBuilder.insert(insertPos, text);
         } else if (tokens.blockStart && tokens.blockEnd && sel.isEmpty) {
-          // block comment on empty selection: insert "/* TAG:  */" and place cursor between
           const text = `${tokens.blockStart} ${tagName}:  ${tokens.blockEnd}`;
           editBuilder.insert(insertPos, text);
         } else {
-          // fallback to line comment
           const text = `// ${tagName}: `;
           editBuilder.insert(insertPos, text);
         }
       }
     });
 
-    // после вставки — обновим сканер/декоратор/вью для видимых редакторов
-    // (если у тебя есть scanner/decorator/tree в замыкании activate)
     try {
-      // пересканируем видимые документы (быстро)
       for (const ed of vscode.window.visibleTextEditors) {
         await scanner.scanDocument(ed.document);
-        decorator.reloadColors?.(); // если есть метод reloadColors
+        decorator.reloadColors();
         decorator.decorateEditor(ed, scanner.getTodosForUri(ed.document.uri));
       }
       tree.refresh?.();
     } catch (e) {
-      // silently ignore
+
     }
   }));
 
-
-  // Команда: добавить тег (имя и опционально цвет)
-  ctx.subscriptions.push(vscode.commands.registerCommand('tagHighlighter.addTag', async () => {
+  // Комманда добавления пользовательского тега
+  context.subscriptions.push(vscode.commands.registerCommand('tagHighlighter.addTag', async () => {
     const name = await vscode.window.showInputBox({
       prompt: 'Имя тега (пример: TODO или ISSUE-XXX)',
       placeHolder: 'TODO',
       validateInput: v => v && v.trim().length > 0 ? null : 'Имя не может быть пустым'
     });
-    if (!name) return; // отмена
+    if (!name) {
+      return;
+    }
 
     const colorInput = await vscode.window.showInputBox({
       prompt: 'Цвет в hex (опционально), например #ffcc00 — оставь пустым для цвета по умолчанию',
       placeHolder: '#ffcc00',
       validateInput: v => {
-        if (!v) return null;
+        if (!v) {
+          return null;
+        }
         return normalizeHexColor(v) ? null : 'Введите hex-цвет вида #RRGGBB или RRGGBB';
       }
     });
 
     const color = normalizeHexColor(colorInput);
 
-    // read, add, dedupe
     const tags = getConfigTags();
     const upper = name.trim().toUpperCase();
     if (tags.find(t => (t.name ?? '').toString().toUpperCase() === upper)) {
@@ -180,16 +172,13 @@ export async function activate(ctx: vscode.ExtensionContext) {
 
     await saveConfigTags(tags);
 
-    // применить изменения: обновить scanner, пересканировать открытые документы и обновить UI
     try {
       scanner.setTags(tags);
       decorator.reloadColors();
-      // пересканируем видимые редакторы (быстро)
       for (const ed of vscode.window.visibleTextEditors) {
         await scanner.scanDocument(ed.document);
         decorator.decorateEditor(ed, scanner.getTodosForUri(ed.document.uri));
       }
-      // можно пересканировать workspace фоном
       scanner.scanWorkspace('**/*.*', '**/node_modules/**').then(() => tree.refresh());
       tree.refresh();
       vscode.window.showInformationMessage(`Тег "${name}" добавлен`);
@@ -198,23 +187,26 @@ export async function activate(ctx: vscode.ExtensionContext) {
     }
   }));
 
-  // Команда: удалить тег (через quickPick)
-  ctx.subscriptions.push(vscode.commands.registerCommand('tagHighlighter.removeTag', async () => {
+  // Комманда удаления тега
+  context.subscriptions.push(vscode.commands.registerCommand('tagHighlighter.removeTag', async () => {
     const tags = getConfigTags();
     if (!tags.length) { vscode.window.showInformationMessage('Нет настроенных тегов'); return; }
 
     const pick = await vscode.window.showQuickPick(tags.map(t => t.name), { placeHolder: 'Выберите тег для удаления' });
-    if (!pick) return;
+    if (!pick) {
+      return;
+    }
 
     const ok = await vscode.window.showQuickPick(['Да, удалить', 'Отменить'], { placeHolder: `Удалить тег "${pick}"?` });
-    if (ok !== 'Да, удалить') return;
+    if (ok !== 'Да, удалить') {
+      return;
+    }
 
     const newTags = tags.filter(t => (t.name ?? '').toString() !== pick);
     await saveConfigTags(newTags);
 
-    // обновляем сканер/декоратор/вью
     scanner.setTags(newTags);
-    scanner.clearCache(); // убрать старые TODO для старых тегов
+    scanner.clearCache(); 
     for (const ed of vscode.window.visibleTextEditors) {
       await scanner.scanDocument(ed.document);
       decorator.decorateEditor(ed, scanner.getTodosForUri(ed.document.uri));
@@ -225,84 +217,102 @@ export async function activate(ctx: vscode.ExtensionContext) {
     vscode.window.showInformationMessage(`Тег "${pick}" удалён`);
   }));
 
-  
-
-  ctx.subscriptions.push(vscode.commands.registerCommand('tagHighlighter.generateReport', async () => {
-    const all = scanner.getAllCached().map(t => ({ file: t.uri.fsPath, line: t.line + 1, tag: t.tag, text: t.tagText }));
-    const uri = await vscode.window.showSaveDialog({ filters: { 'JSON': ['json'] }, saveLabel: 'Save TODO report' });
-    if (!uri) return;
-    await vscode.workspace.fs.writeFile(uri, Buffer.from(JSON.stringify(all, null, 2), 'utf8'));
-    vscode.window.showInformationMessage(`Report saved: ${uri.fsPath}`);
-  }));
-
-  ctx.subscriptions.push(vscode.commands.registerCommand('tagHighlighter.nextTag', () => navigateTodo(1, scanner)));
-  ctx.subscriptions.push(vscode.commands.registerCommand('tagHighlighter.prevTag', () => navigateTodo(-1, scanner)));
-  ctx.subscriptions.push(vscode.commands.registerCommand('tagHighlighter.openKeybindings', async () => {
-  // откроет панель Keyboard Shortcuts UI
+  // Комманда переключения курсора на слудующий тег в открытом файле
+  context.subscriptions.push(vscode.commands.registerCommand('tagHighlighter.nextTag', () => navigateTag(1, scanner)));
+  // Комманда переключения курсора на предыдущий тег в открытом файле
+  context.subscriptions.push(vscode.commands.registerCommand('tagHighlighter.prevTag', () => navigateTag(-1, scanner)));
+  // Комманда для открытия настроек горячих клавиш
+  context.subscriptions.push(vscode.commands.registerCommand('tagHighlighter.openKeybindings', async () => {
     await vscode.commands.executeCommand('workbench.action.openGlobalKeybindings'); 
   }));
 
-
-  // initial scan for visible editors
+  // Первичное сканирование открытых документов
   for (const ed of vscode.window.visibleTextEditors) {
     await scanner.scanDocument(ed.document);
     decorator.decorateEditor(ed, scanner.getTodosForUri(ed.document.uri));
   }
   tree.refresh();
   
-
-  // debounce handler for document changes
+  // Применение декоратора при смене текстогого документа
   let t: NodeJS.Timeout | undefined;
-  ctx.subscriptions.push(vscode.workspace.onDidChangeTextDocument(ev => {
-    if (t) clearTimeout(t);
+  context.subscriptions.push(vscode.workspace.onDidChangeTextDocument(ev => {
+    if (t) {
+      clearTimeout(t);
+    }
     t = setTimeout(async () => {
       await scanner.scanDocument(ev.document);
       const ed = vscode.window.visibleTextEditors.find(e => e.document.uri.toString() === ev.document.uri.toString());
-      if (ed) decorator.decorateEditor(ed, scanner.getTodosForUri(ev.document.uri));
+      if (ed) {
+        decorator.decorateEditor(ed, scanner.getTodosForUri(ev.document.uri));
+      }
       tree.refresh();
     }, 250);
   }));
   
-
-  // when opening documents
-  ctx.subscriptions.push(vscode.workspace.onDidOpenTextDocument(async doc => {
+  // Применение декоратора при открытие текстогого документа 
+  context.subscriptions.push(vscode.workspace.onDidOpenTextDocument(async doc => {
     await scanner.scanDocument(doc);
     const ed = vscode.window.visibleTextEditors.find(e => e.document.uri.toString() === doc.uri.toString());
-    if (ed) decorator.decorateEditor(ed, scanner.getTodosForUri(doc.uri));
+    if (ed) {
+      decorator.decorateEditor(ed, scanner.getTodosForUri(doc.uri));
+    }
     tree.refresh();
   }));
 
-  // when visible editors change, re-decorate them
-  ctx.subscriptions.push(vscode.window.onDidChangeVisibleTextEditors(editors => {
-    for (const ed of editors) decorator.decorateEditor(ed, scanner.getTodosForUri(ed.document.uri));
+  // Применение декоратора при изменения файла
+  context.subscriptions.push(vscode.window.onDidChangeVisibleTextEditors(editors => {
+    for (const ed of editors) {
+      decorator.decorateEditor(ed, scanner.getTodosForUri(ed.document.uri));
+    }
   }));
 
-  // background workspace scan (non-blocking)
+
   scanner.scanWorkspace('**/*.*', '**/node_modules/**').then(() => tree.refresh()).catch(() => {});
 }
 
-export function deactivate() {
-  // Disposables cleaned up by VS Code automatically if pushed to context.subscriptions
-}
-
-/** Навигация по TODO в активном редакторе: dir = 1 (next), -1 (prev) */
-function navigateTodo(dir: 1 | -1, scanner: Scanner) {
+// Находит ближайший тег (выше или ниже в зависимости от аргумента. 1 и -1 соответственно) в открытом файле относительно курсора
+// Перемещает курсор на найденный тег
+// Принимает направление поиска и класс `Scanner`
+function navigateTag(dir: 1 | -1, scanner: Scanner) {
   const ed = vscode.window.activeTextEditor;
   if (!ed) { vscode.window.showInformationMessage('Нет активного редактора'); return; }
 
-  const todos = scanner.getTodosForUri(ed.document.uri);
-  if (!todos.length) { vscode.window.showInformationMessage('TODO не найдены в этом файле'); return; }
+  const tags = scanner.getTodosForUri(ed.document.uri);
+  if (!tags || tags.length === 0) { vscode.window.showInformationMessage('Тэги не найдены в этом файле'); return; }
+
+  tags.sort((a, b) => a.range.start.line - b.range.start.line || a.range.start.character - b.range.start.character);
 
   const pos = ed.selection.active;
-  let idx = dir === 1
-    ? todos.findIndex(t => t.range.start.isAfter(pos))
-    : (() => {
-      for (let i = todos.length - 1; i >= 0; i--) if (todos[i].range.start.isBefore(pos)) return i;
-      return -1;
-    })();
 
-  if (idx === -1) idx = dir === 1 ? 0 : todos.length - 1;
-  const t = todos[idx];
-  ed.revealRange(t.range, vscode.TextEditorRevealType.InCenter);
-  ed.selection = new vscode.Selection(t.range.start, t.range.end);
+  const insideIndex = tags.findIndex(t => t.range.contains(pos));
+
+  let targetIndex = -1;
+
+  if (insideIndex !== -1) {
+    targetIndex = dir === 1 ? insideIndex + 1 : insideIndex - 1;
+  } else {
+    if (dir === 1) {
+      targetIndex = tags.findIndex(t => t.range.start.isAfter(pos));
+    } else {
+      for (let i = tags.length - 1; i >= 0; i--) {
+        if (tags[i].range.start.isBefore(pos)) { targetIndex = i; break; }
+      }
+    }
+  }
+
+  if (targetIndex < 0) {
+    targetIndex = tags.length - 1;
+  }
+  if (targetIndex >= tags.length) {
+    targetIndex = 0;
+  }
+
+  const target = tags[targetIndex];
+  if (!target) {
+    return;
+  }
+
+  ed.revealRange(target.range, vscode.TextEditorRevealType.InCenter);
+  ed.selection = new vscode.Selection(target.range.start, target.range.end);
 }
+
