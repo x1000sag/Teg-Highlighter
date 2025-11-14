@@ -1,4 +1,8 @@
 {
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/x1000sag/Tag-Highlighter/"
+  },
   "name": "tag-highlighter",
   "displayName": "Tag Highlighter",
   "description": "Подсвечивает теги вроде TODO, FIXME, NOTE и отображает их в боковой панели.",
